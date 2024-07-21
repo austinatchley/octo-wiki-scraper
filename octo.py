@@ -5,11 +5,11 @@ import os
 from markdownify import markdownify
 
 BASE_URL = "https://en.wikipedia.org/wiki/"
-START_URL = "Opera"
+START_URL = "Yorkville,_Manhattan"
 OUTPUT_FOLDER = "out/" # TODO: Make this a relative path
 WIKI_PREFIX = "/wiki/"
 MAX_DEPTH = 1
-MAX_ARTICLES = 300
+MAX_ARTICLES = 500
 
 
 # TODO: Move into a new file
