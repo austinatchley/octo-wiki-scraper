@@ -3,23 +3,25 @@ from bs4 import BeautifulSoup, PageElement, ResultSet
 from urllib.parse import urljoin, urlparse
 import os
 
-BASE_URL = 'https://en.wikipedia.org/wiki/'
-START_URL = 'Web_scraping'
-OUTPUT_FOLDER = 'out/' # TODO: Make this a relative path
-MAX_DEPTH = 3
+BASE_URL = "https://en.wikipedia.org/wiki/"
+START_URL = "Web_scraping"
+OUTPUT_FOLDER = "out/" # TODO: Make this a relative path
+MAX_DEPTH = 1
+WIKI_PREFIX = "/wiki/"
 
 # Function to download HTML content of a Wikipedia page
 def download_wikipedia_html(relative_url: str, depth: int, visited: set[str]):
+    # print(f"depth={depth}")
     if relative_url in visited:
         return
 
     visited.add(relative_url)
     
     full_url = BASE_URL + relative_url
-    print(f"Requesting {full_url}")
+    print(f"Requesting '{full_url}'")
     
     # Send a GET request to the Wikipedia page
-    response = requests.get(full_url)
+    response: requests.Response = requests.get(full_url)
     
     # Check if the request was successful (status code 200)
     if response.status_code != 200:
@@ -27,24 +29,27 @@ def download_wikipedia_html(relative_url: str, depth: int, visited: set[str]):
         return
     
     # Parse the HTML content
-    soup = BeautifulSoup(response.content, 'html.parser')
+    soup = BeautifulSoup(response.content, "html.parser")
     # print(soup.text)
     
     # Save the HTML content to a file
-    filename = relative_url.replace("/", "_")
-    path = os.path.join(OUTPUT_FOLDER, filename)
-    print(f"Path={path}")
-    with open(path, 'w', encoding='utf-8') as file:
-        file.write(response.text)
-    print(f"HTML content saved to '{filename}'")
+    filename = relative_url.replace("/", "_") + ".html"
+    save_file(filename, response.text)
     
     # Extract all links from the page
     if depth >= MAX_DEPTH:
-        print("Reached max depth")
+        # print("Reached max depth")
         return
 
     for link in extract_links(soup):
         process_link(link, depth, visited)
+
+def save_file(filename: str, filetext: str):
+    path = os.path.join(OUTPUT_FOLDER, filename)
+
+    with open(path, "w", encoding="utf-8") as file:
+        file.write(filetext)
+    print(f"HTML content saved to '{filename}'")
     
 # Function to check if a URL is a valid Wikipedia article link
 def is_valid_wikipedia_link(url):
@@ -57,16 +62,15 @@ def extract_links(soup: BeautifulSoup) -> ResultSet[PageElement]:
 def process_link(link: PageElement, depth: int, visited: set[str]) -> None:
     relative_link = link.get('href')
 
-    if not relative_link.startswith('/wiki/'):
+    if not relative_link.startswith(WIKI_PREFIX):
         return
-    relative_link = relative_link.replace('/wiki/', '')
 
-    # Construct absolute URL
+    relative_link = relative_link.replace('/wiki/', '')
     absolute_link = urljoin(BASE_URL, relative_link)
     
     # Ensure it's a Wikipedia article link and not a special page
     if is_valid_wikipedia_link(absolute_link):
-        print(f"Visiting linked page: {relative_link}")
+        # print(f"Visiting linked page: {relative_link}")
 
         # Recursively download HTML of linked article
         download_wikipedia_html(relative_link, depth + 1, visited)
