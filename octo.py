@@ -2,13 +2,14 @@ import requests
 from bs4 import BeautifulSoup, PageElement, ResultSet
 from urllib.parse import ParseResult, urljoin, urlparse
 import os
+from markdownify import markdownify
 
 BASE_URL = "https://en.wikipedia.org/wiki/"
 START_URL = "Opera"
 OUTPUT_FOLDER = "out/" # TODO: Make this a relative path
 WIKI_PREFIX = "/wiki/"
 MAX_DEPTH = 1
-MAX_ARTICLES = 100
+MAX_ARTICLES = 300
 
 
 # TODO: Move into a new file
@@ -53,7 +54,8 @@ def download_wikipedia_html(relative_url: str, depth: int, counter: ArticleCount
     
     # Save the HTML content to a file
     filename = relative_url.replace("/", "_") + ".html"
-    save_file(filename, response.text)
+    filetext = preprocess_text(response.text)
+    save_file(filename, filetext)
     
     if depth >= MAX_DEPTH:
         return
@@ -74,6 +76,10 @@ def save_file(filename: str, filetext: str):
 
     # print(f"HTML content saved to '{filename}'")
     
+
+def preprocess_text(html: str) -> str:
+    return html
+    # return markdownify(html) # TODO
 
 # Function to check if a URL is a valid Wikipedia article link
 def is_valid_wikipedia_link(url: str) -> bool:
@@ -109,11 +115,11 @@ def process_link(link: PageElement, depth: int, visited: set[str]) -> None:
         download_wikipedia_html(relative_link, depth + 1, visited)
 
 if __name__ == "__main__": 
-    # Create output folder if it doesn't exist
     if not os.path.exists(OUTPUT_FOLDER):
         os.makedirs(OUTPUT_FOLDER)
     
     article_counter = ArticleCounter(MAX_ARTICLES)
+
     download_wikipedia_html(relative_url=START_URL, 
                             depth=0, 
                             counter=article_counter)
