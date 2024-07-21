@@ -1,71 +1,104 @@
 import requests
 from bs4 import BeautifulSoup, PageElement, ResultSet
-from urllib.parse import urljoin, urlparse
+from urllib.parse import ParseResult, urljoin, urlparse
 import os
 
 BASE_URL = "https://en.wikipedia.org/wiki/"
-START_URL = "Web_scraping"
+START_URL = "Opera"
 OUTPUT_FOLDER = "out/" # TODO: Make this a relative path
-MAX_DEPTH = 1
 WIKI_PREFIX = "/wiki/"
+MAX_DEPTH = 1
+MAX_ARTICLES = 100
+
+
+# TODO: Move into a new file
+class ArticleCounter:
+    def __init__(self, max: int) -> None:
+        self.count: int = 0
+        self.max_count: int = max
+        self.visited: set[str] = set()
+
+    def visit(self, link: str):
+        self.visited.add(link)
+        self.increment()
+
+    def increment(self):
+        self.count += 1
+
+    def reached_max_articles(self):
+        return self.count >= self.max_count
+
+    def seen(self, link: str):
+        return link in self.visited
+
+    def num_visited(self):
+        return len(self.visited)
+
 
 # Function to download HTML content of a Wikipedia page
-def download_wikipedia_html(relative_url: str, depth: int, visited: set[str]):
-    # print(f"depth={depth}")
-    if relative_url in visited:
+def download_wikipedia_html(relative_url: str, depth: int, counter: ArticleCounter):    
+    if counter.seen(relative_url):
         return
 
-    visited.add(relative_url)
+    counter.visit(relative_url)
     
     full_url = BASE_URL + relative_url
     print(f"Requesting '{full_url}'")
     
     # Send a GET request to the Wikipedia page
     response: requests.Response = requests.get(full_url)
-    
-    # Check if the request was successful (status code 200)
     if response.status_code != 200:
         print("Failed to retrieve the webpage.")
-        return
-    
-    # Parse the HTML content
-    soup = BeautifulSoup(response.content, "html.parser")
-    # print(soup.text)
+        return 
     
     # Save the HTML content to a file
     filename = relative_url.replace("/", "_") + ".html"
     save_file(filename, response.text)
     
-    # Extract all links from the page
     if depth >= MAX_DEPTH:
-        # print("Reached max depth")
         return
 
-    for link in extract_links(soup):
-        process_link(link, depth, visited)
+    # Extract and process all links from the page
+    for link in extract_links(response):
+        if counter.reached_max_articles():
+            return
+
+        process_link(link, depth, counter)
+
 
 def save_file(filename: str, filetext: str):
     path = os.path.join(OUTPUT_FOLDER, filename)
 
     with open(path, "w", encoding="utf-8") as file:
         file.write(filetext)
-    print(f"HTML content saved to '{filename}'")
+
+    # print(f"HTML content saved to '{filename}'")
     
+
 # Function to check if a URL is a valid Wikipedia article link
-def is_valid_wikipedia_link(url):
-    parsed_url = urlparse(url)
-    return parsed_url.scheme in ('http', 'https') and 'wikipedia.org' in parsed_url.netloc
+def is_valid_wikipedia_link(url: str) -> bool:
+    parsed_url: ParseResult = urlparse(url)
+    return parsed_url.scheme in ("http", "https") and "wikipedia.org" in parsed_url.netloc
 
-def extract_links(soup: BeautifulSoup) -> ResultSet[PageElement]:
-    return soup.find_all('a', href=True)
+
+def extract_links(response: requests.Response) -> list[PageElement]:
+    soup = BeautifulSoup(response.content, "html.parser")
+
+    # print(soup.text)
+    links: ResultSet[PageElement] = soup.find_all("a", href=True)
+
+    # TODO: Impl filtering logic here. Link ranking, enforce a max from each page, etc.
+
+    return links
     
-def process_link(link: PageElement, depth: int, visited: set[str]) -> None:
-    relative_link = link.get('href')
 
-    if not relative_link.startswith(WIKI_PREFIX):
+def process_link(link: PageElement, depth: int, visited: set[str]) -> None:
+    relative_link = link.get("href")
+
+    if relative_link is None or not relative_link.startswith(WIKI_PREFIX):
         return
 
-    relative_link = relative_link.replace('/wiki/', '')
+    relative_link = relative_link.replace(WIKI_PREFIX, "")
     absolute_link = urljoin(BASE_URL, relative_link)
     
     # Ensure it's a Wikipedia article link and not a special page
@@ -75,13 +108,14 @@ def process_link(link: PageElement, depth: int, visited: set[str]) -> None:
         # Recursively download HTML of linked article
         download_wikipedia_html(relative_link, depth + 1, visited)
 
-
-
 if __name__ == "__main__": 
     # Create output folder if it doesn't exist
     if not os.path.exists(OUTPUT_FOLDER):
         os.makedirs(OUTPUT_FOLDER)
     
+    article_counter = ArticleCounter(MAX_ARTICLES)
     download_wikipedia_html(relative_url=START_URL, 
                             depth=0, 
-                            visited=set())
+                            counter=article_counter)
+
+    print(f"\nFinished successfully with {article_counter.num_visited()} pages visited!")
